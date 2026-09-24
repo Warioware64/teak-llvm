@@ -46,7 +46,8 @@ do_check() {
         "$SRCDIR/llvm/test/MC/Teak" \
         "$SRCDIR/llvm/test/CodeGen/Teak" \
         "$SRCDIR/lld/test/ELF/teak-relocs.s" \
-        "$SRCDIR/clang/test/Driver/teak-integrated-as.s"
+        "$SRCDIR/clang/test/Driver/teak-integrated-as.s" \
+        "$SRCDIR/clang/test/CodeGen/teak-pointer-struct.c"
 }
 
 do_install() {

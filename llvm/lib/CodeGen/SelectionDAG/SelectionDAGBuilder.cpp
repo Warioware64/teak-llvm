@@ -3900,7 +3900,7 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
         {
             assert((Offset & 1) == 0 && "Field offset is not word-aligned!");
             Offset >>= 1;
-            dbgs() << "Offset >>= 1;\n";
+            LLVM_DEBUG(dbgs() << "Offset >>= 1;\n");
         }
 
         // In an inbounds GEP with an offset that is nonnegative even when

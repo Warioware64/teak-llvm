@@ -488,6 +488,23 @@ bool TeakInstrInfo::PredicateInstruction(MachineInstr &MI, ArrayRef<MachineOpera
     return false;
 }
 
+// Almost every instruction changes the flags (ICC). The if-converter must know
+// it: otherwise it can move them between a comparison and the instructions
+// predicated on it.
+bool TeakInstrInfo::DefinesPredicate(MachineInstr &MI,
+                                     std::vector<MachineOperand> &Pred) const
+{
+    bool found = false;
+    for (const MachineOperand &MO : MI.operands())
+    {
+        if (!MO.isReg() || !MO.isDef() || MO.getReg() != Teak::ICC)
+            continue;
+        Pred.push_back(MO);
+        found = true;
+    }
+    return found;
+}
+
 bool TeakInstrInfo::isProfitableToIfCvt(MachineBasicBlock &MBB, unsigned NumCycles, unsigned ExtraPredCycles, BranchProbability Probability) const
 {
     LLVM_DEBUG(dbgs() << "isProfitableToIfCvt\n");
@@ -522,6 +539,41 @@ void TeakInstrInfo::makeRnRegDisplacement(MachineBasicBlock& mbb, MachineInstr& 
         BuildMI(mbb, mi, dl, get(Teak::ADDV_imm16_RegNoBRegs16), reg)
             .addImm(offset)
             .addReg(reg);
+}
+
+// The 32-bit stack slot pseudos only move the high and low words. These copy
+// the extension bits of a 40-bit register to/from the third word of the slot,
+// through R6 (saved on the stack), because the extension registers can only be
+// pushed and popped. frameOffset is the word offset of the high word from R7.
+void TeakInstrInfo::storeAbExtToFrame(MachineBasicBlock &MBB, MachineInstr &MI,
+                                      const DebugLoc &DL, unsigned srcReg,
+                                      unsigned baseReg,
+                                      signed short frameOffset) const
+{
+    BuildMI(MBB, MI, DL, get(Teak::PUSH_regnob16)).addReg(Teak::R6);
+    BuildMI(MBB, MI, DL, get(Teak::PUSH_abe)).addReg(teakGetAbEReg(srcReg));
+    BuildMI(MBB, MI, DL, get(Teak::POP_regnob16), Teak::R6);
+    makeRnRegDisplacement(MBB, MI, DL, baseReg, frameOffset - 2);
+    BuildMI(MBB, MI, DL, get(Teak::MOV_regnob16_memrn))
+        .addReg(Teak::R6)
+        .addReg(baseReg);
+    makeRnRegDisplacement(MBB, MI, DL, baseReg, -(frameOffset - 2));
+    BuildMI(MBB, MI, DL, get(Teak::POP_regnob16), Teak::R6);
+}
+
+void TeakInstrInfo::loadAbExtFromFrame(MachineBasicBlock &MBB, MachineInstr &MI,
+                                       const DebugLoc &DL, unsigned dstReg,
+                                       unsigned baseReg,
+                                       signed short frameOffset) const
+{
+    BuildMI(MBB, MI, DL, get(Teak::PUSH_regnob16)).addReg(Teak::R6);
+    makeRnRegDisplacement(MBB, MI, DL, baseReg, frameOffset - 2);
+    BuildMI(MBB, MI, DL, get(Teak::MOV_memrn_regnob16), Teak::R6)
+        .addReg(baseReg);
+    makeRnRegDisplacement(MBB, MI, DL, baseReg, -(frameOffset - 2));
+    BuildMI(MBB, MI, DL, get(Teak::PUSH_regnob16)).addReg(Teak::R6);
+    BuildMI(MBB, MI, DL, get(Teak::POP_abe), teakGetAbEReg(dstReg));
+    BuildMI(MBB, MI, DL, get(Teak::POP_regnob16), Teak::R6);
 }
 
 bool TeakInstrInfo::expandPostRAPseudo(MachineInstr &MI) const
@@ -604,6 +656,8 @@ bool TeakInstrInfo::expandPostRAPseudo(MachineInstr &MI) const
                     .addReg(MI.getOperand(1).getReg());
                 makeRnRegDisplacement(MBB, MI, DL, MI.getOperand(1).getReg(), -frameOffset + 1);
             }
+            storeAbExtToFrame(MBB, MI, DL, srcReg,
+                              MI.getOperand(1).getReg(), frameOffset);
             if(keepFlags)
                 BuildMI(MBB, MI, DL, get(Teak::POP_ararpsttmod), Teak::STT0);
             MBB.erase(MI);
@@ -749,6 +803,8 @@ bool TeakInstrInfo::expandPostRAPseudo(MachineInstr &MI) const
                     .addReg(Teak::A0)
                     .addReg(dstReg);
             }
+            loadAbExtFromFrame(MBB, MI, DL, dstReg,
+                               MI.getOperand(1).getReg(), frameOffset);
             if(keepFlags)
                 BuildMI(MBB, MI, DL, get(Teak::POP_ararpsttmod), Teak::STT0);
             MBB.erase(MI);

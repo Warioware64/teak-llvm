@@ -27,6 +27,12 @@ class TeakInstrInfo : public TeakGenInstrInfo {
   virtual void anchor();
 
   void makeRnRegDisplacement(MachineBasicBlock& mbb, MachineInstr& mi, const DebugLoc& dl, Register reg, signed short offset) const;
+  void storeAbExtToFrame(MachineBasicBlock &MBB, MachineInstr &MI,
+                         const DebugLoc &DL, unsigned srcReg, unsigned baseReg,
+                         signed short frameOffset) const;
+  void loadAbExtFromFrame(MachineBasicBlock &MBB, MachineInstr &MI,
+                          const DebugLoc &DL, unsigned dstReg, unsigned baseReg,
+                          signed short frameOffset) const;
 
 public:
   TeakInstrInfo();
@@ -95,6 +101,8 @@ public:
 
   virtual bool isPredicated(const MachineInstr &MI) const override;
   virtual bool PredicateInstruction(MachineInstr &MI, ArrayRef<MachineOperand> Pred) const override;
+  virtual bool DefinesPredicate(MachineInstr &MI,
+                                std::vector<MachineOperand> &Pred) const override;
   virtual bool isProfitableToIfCvt(MachineBasicBlock &MBB, unsigned NumCycles, unsigned ExtraPredCycles, BranchProbability Probability) const;
   virtual bool isProfitableToIfCvt(MachineBasicBlock &TBB, unsigned TCycles, unsigned TExtra, MachineBasicBlock &FBB, unsigned FCycles, unsigned FExtra, BranchProbability Probability) const;
 

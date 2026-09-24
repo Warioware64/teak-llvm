@@ -26,6 +26,10 @@ public:
   TeakTargetInfo(const llvm::Triple &Triple, const TargetOptions &)
       : TargetInfo(Triple) {
     NoAsmVariants = true;
+    // Pointers are 16-bit word addresses ("p0:16:16" in the data layout).
+    // With the default 32-bit width, the layout of structures containing
+    // pointers didn't match the LLVM types.
+    PointerWidth = PointerAlign = 16;
     LongLongAlign = 32;
     SuitableAlign = 32;
     DoubleAlign = LongDoubleAlign = 32;

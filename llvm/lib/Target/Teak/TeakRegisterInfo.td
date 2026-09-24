@@ -194,6 +194,8 @@ def PAGE79 : TeakReg<0, "[page:0x004Fu8]">;
 // Register classes.
 //
 def GRRegs : RegisterClass<"Teak", [i16], 16, (add R0, R1, R2, R3, R4, R5, R6, R7)>;
+// 40-bit registers are spilled as 3 words (high, low and extension)
+let RegInfos = RegInfoByHwMode<[DefaultMode], [RegInfo<40, 48, 32>]> in
 def RegNoBRegs40 : RegisterClass<"Teak", [i40], 32, (add A0, A1)>;
 def RegNoBRegs16 : RegisterClass<"Teak", [i16], 16, (add R0, R1, R2, R3, R4, R5, R6, R7, Y0, SP, B0H, B1H, B0L, B1L, A0L, A1L, A0H, A1H, LC, SV, EXT0, EXT1, EXT2, EXT3)>;
 def RegNoBRegs16_nolh : RegisterClass<"Teak", [i16], 16, (add R0, R1, R2, R3, R4, R5, R6, R7, Y0, SP, LC, SV, EXT0, EXT1, EXT2, EXT3)>;
@@ -203,10 +205,20 @@ def RegNoBRegs16_noh_page : RegisterClass<"Teak", [i16], 16, (add R0, R1, R2, R3
 def RegR0425 : RegisterClass<"Teak", [i16], 16, (add R0, R4, R2, R5)>;
 //def RegNoBRegsP040 : RegisterClass<"Teak", [i40], 32, (add A0, A1)>;
 //def RegNoBRegsP016 : RegisterClass<"Teak", [i16], 16, (add R0, R1, R2, R3, R4, R5, R7, Y0, /**/ SP, B0H, B1H, B0L, B1L, A0L, A1L, A0H, A1H, LC, SV)>;
+// 40-bit registers are spilled as 3 words (high, low and extension)
+let RegInfos = RegInfoByHwMode<[DefaultMode], [RegInfo<40, 48, 32>]> in
 def ARegs : RegisterClass<"Teak", [i40], 32, (add A0, A1)>;
+// 40-bit registers are spilled as 3 words (high, low and extension)
+let RegInfos = RegInfoByHwMode<[DefaultMode], [RegInfo<40, 48, 32>]> in
 def BRegs : RegisterClass<"Teak", [i40], 32, (add B0, B1)>;
+// 40-bit registers are spilled as 3 words (high, low and extension)
+let RegInfos = RegInfoByHwMode<[DefaultMode], [RegInfo<40, 48, 32>]> in
 def B0Reg : RegisterClass<"Teak", [i40], 32, (add B0)>;
+// 40-bit registers are spilled as 3 words (high, low and extension)
+let RegInfos = RegInfoByHwMode<[DefaultMode], [RegInfo<40, 48, 32>]> in
 def B1Reg : RegisterClass<"Teak", [i40], 32, (add B1)>;
+// 40-bit registers are spilled as 3 words (high, low and extension)
+let RegInfos = RegInfoByHwMode<[DefaultMode], [RegInfo<40, 48, 32>]> in
 def ABRegs : RegisterClass<"Teak", [i40], 32, (add A0, A1, B0, B1)>;
 let CopyCost = -1 in
 {

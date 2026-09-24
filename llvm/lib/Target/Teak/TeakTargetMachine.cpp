@@ -96,6 +96,7 @@ bool TeakPassConfig::addInstSelector()
 void TeakPassConfig::addPreEmitPass()
 {
     addPass(createTeakOptimizeMovImmPass());
+    addPass(createTeakR7HazardPass());
     addPass(&BranchRelaxationPassID);
 }
 

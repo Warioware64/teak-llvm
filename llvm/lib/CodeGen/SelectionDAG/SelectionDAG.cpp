@@ -5810,6 +5810,20 @@ SDValue SelectionDAG::getMemBasePlusOffset(SDValue Ptr, SDValue Offset,
                                            const SDNodeFlags Flags) {
   assert(Offset.getValueType().isInteger());
   EVT BasePtrVT = Ptr.getValueType();
+
+  // Teak addresses are in 16-bit words, but generic code computes the offsets
+  // in bytes (for example when a 32-bit load is narrowed to its low half).
+  if (getTarget().getTargetTriple().getArch() == Triple::teak) {
+    EVT OffsetVT = Offset.getValueType();
+    if (auto *C = dyn_cast<ConstantSDNode>(Offset)) {
+      assert((C->getSExtValue() & 1) == 0 && "Unaligned memory offset on Teak");
+      Offset = getConstant(C->getSExtValue() / 2, DL, OffsetVT);
+    } else {
+      Offset = getNode(ISD::SRA, DL, OffsetVT, Offset,
+                       getShiftAmountConstant(1, OffsetVT, DL));
+    }
+  }
+
   return getNode(ISD::ADD, DL, BasePtrVT, Ptr, Offset, Flags);
 }
 

@@ -25,6 +25,7 @@ namespace llvm
 
     FunctionPass* createTeakISelDag(TeakTargetMachine &TM, CodeGenOpt::Level OptLevel);
     FunctionPass* createTeakOptimizeMovImmPass();
+    FunctionPass* createTeakR7HazardPass();
 
     namespace TeakCC
     {

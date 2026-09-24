@@ -21,6 +21,7 @@ add_llvm_target(TeakCodeGen
   TeakAsmPrinter.cpp
   TeakMCInstLower.cpp
   TeakOptimizeMovImmPass.cpp
+  TeakR7HazardPass.cpp
   )
 
 add_subdirectory(AsmParser)

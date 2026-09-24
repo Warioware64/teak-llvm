@@ -102,6 +102,9 @@ TeakTargetLowering::TeakTargetLowering(const TeakTargetMachine &TeakTM)
 	setOperationAction(ISD::SUB, MVT::i16, Custom);
 	setOperationAction(ISD::MUL, MVT::i16, Custom);
 	setOperationAction(ISD::MUL, MVT::i40, Custom);
+	// High half of a 16x16 product (used for divisions by constants)
+	setOperationAction(ISD::MULHU, MVT::i16, Custom);
+	setOperationAction(ISD::MULHS, MVT::i16, Custom);
 	setOperationAction(ISD::AND, MVT::i16, Custom);
 	setOperationAction(ISD::AND, MVT::i40, Custom);
 	setOperationAction(ISD::XOR, MVT::i16, Custom);
@@ -340,6 +343,25 @@ static void lookThroughSetCC(SDValue &LHS, SDValue &RHS, ISD::CondCode CC, unsig
 	}
 }
 
+// Comparisons are done on 40-bit values with signed conditions, so unsigned
+// comparisons need operands that are zero-extended. i32 values are held in
+// 40-bit registers and they may have been sign-extended (for example by type
+// legalization), so their top 8 bits are cleared unless they are known to be
+// zero.
+static SDValue extendCompareOperand(SelectionDAG &DAG, const SDLoc &dl,
+                                    SDValue V, bool isUnsigned)
+{
+	if (V.getValueType() != MVT::i40)
+		return DAG.getNode(isUnsigned ? ISD::ZERO_EXTEND : ISD::SIGN_EXTEND,
+		                   dl, MVT::i40, V);
+
+	if (isUnsigned && !DAG.MaskedValueIsZero(V, APInt::getHighBitsSet(40, 8)))
+		return DAG.getNode(ISD::AND, dl, MVT::i40, V,
+		                   DAG.getConstant(0xFFFFFFFFull, dl, MVT::i40));
+
+	return V;
+}
+
 static TeakCC::CondCodes IntCondCCodeToICC(ISD::CondCode CC)
 {
 	switch (CC)
@@ -376,11 +398,8 @@ SDValue TeakTargetLowering::LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const
 	if(CC == ISD::SETULT || CC == ISD::SETULE || CC == ISD::SETUGT || CC == ISD::SETUGE)
 		unsgn = true;
 
-	if(LHS.getValueType() != MVT::i40)
-		LHS = DAG.getNode(unsgn ? ISD::ZERO_EXTEND : ISD::SIGN_EXTEND, dl, MVT::i40, LHS);
-
-	if(RHS.getValueType() != MVT::i40)
-		RHS = DAG.getNode(unsgn ? ISD::ZERO_EXTEND : ISD::SIGN_EXTEND, dl, MVT::i40, RHS);
+	LHS = extendCompareOperand(DAG, dl, LHS, unsgn);
+	RHS = extendCompareOperand(DAG, dl, RHS, unsgn);
 
 	SDValue CompareFlag;
 	if (LHS.getValueType().isInteger())
@@ -414,11 +433,8 @@ SDValue TeakTargetLowering::LowerBR_CC(SDValue Op, SelectionDAG &DAG) const
 	if(CC == ISD::SETULT || CC == ISD::SETULE || CC == ISD::SETUGT || CC == ISD::SETUGE)
 		unsgn = true;
 
-	if(LHS.getValueType() != MVT::i40)
-		LHS = DAG.getNode(unsgn ? ISD::ZERO_EXTEND : ISD::SIGN_EXTEND, dl, MVT::i40, LHS);
-
-	if(RHS.getValueType() != MVT::i40)
-		RHS = DAG.getNode(unsgn ? ISD::ZERO_EXTEND : ISD::SIGN_EXTEND, dl, MVT::i40, RHS);
+	LHS = extendCompareOperand(DAG, dl, LHS, unsgn);
+	RHS = extendCompareOperand(DAG, dl, RHS, unsgn);
 
 	// Get the condition flag.
 	SDValue CompareFlag;
@@ -436,39 +452,57 @@ SDValue TeakTargetLowering::LowerBR_CC(SDValue Op, SelectionDAG &DAG) const
 						DAG.getConstant(SPCC, dl, MVT::i40), CompareFlag);
 }
 
-// Unsigned 16x16 -> 32 bit product, using the signed multiplier plus a
-// correction for the operands with bit 15 set:
-//   ua * ub = sa * sb + ((sa < 0 ? ub : 0) + (sb < 0 ? ua : 0)) << 16 (mod 2^32)
-// Only the low 16 bits of the correction affect the result.
+// The products below are exact in all 40 bits, not only modulo 2^32: the DAG
+// combiner uses the known bits of a multiplication (for example "the top bits
+// of an unsigned 16x16 product are zero") to remove later masks.
+//
+// With sa/sb the signed and ua/ub the unsigned value of the 16-bit operands,
+// and a15/b15 their bit 15:
+//   ua * ub = sa * sb + ((a15 ? ub : 0) + (b15 ? sa : 0)) << 16
+//   sa * ub = sa * sb + (b15 ? sa : 0) << 16
+
+// Mask with all bits set if bit 15 of the 16-bit value is set
+static SDValue getSignMask16(SelectionDAG &DAG, const SDLoc &dl, SDValue V16)
+{
+	return DAG.getNode(ISD::SRA, dl, MVT::i40,
+		DAG.getNode(ISD::SIGN_EXTEND, dl, MVT::i40, V16),
+		DAG.getConstant(15, dl, MVT::i40));
+}
+
+// Signed A16 times unsigned B16
+static SDValue getSUMul16x16(SelectionDAG &DAG, const SDLoc &dl, SDValue A16,
+                             SDValue B16)
+{
+	SDValue Prod = DAG.getNode(TeakISD::MPY, dl, MVT::i40, A16, B16);
+	SDValue SA = DAG.getNode(ISD::SIGN_EXTEND, dl, MVT::i40, A16);
+	SDValue Corr = DAG.getNode(ISD::AND, dl, MVT::i40, getSignMask16(DAG, dl, B16), SA);
+	Corr = DAG.getNode(ISD::SHL, dl, MVT::i40, Corr, DAG.getConstant(16, dl, MVT::i40));
+	return DAG.getNode(ISD::ADD, dl, MVT::i40, Prod, Corr);
+}
+
+// Unsigned A16 times unsigned B16
 static SDValue getUMul16x16(SelectionDAG &DAG, const SDLoc &dl, SDValue A16,
                             SDValue B16)
 {
 	SDValue Prod = DAG.getNode(TeakISD::MPY, dl, MVT::i40, A16, B16);
-
-	SDValue Fifteen = DAG.getConstant(15, dl, MVT::i40);
-	SDValue MaskA = DAG.getNode(ISD::SRA, dl, MVT::i40,
-		DAG.getNode(ISD::SIGN_EXTEND, dl, MVT::i40, A16), Fifteen);
-	SDValue MaskB = DAG.getNode(ISD::SRA, dl, MVT::i40,
-		DAG.getNode(ISD::SIGN_EXTEND, dl, MVT::i40, B16), Fifteen);
-	SDValue ZA = DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i40, A16);
+	SDValue SA = DAG.getNode(ISD::SIGN_EXTEND, dl, MVT::i40, A16);
 	SDValue ZB = DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i40, B16);
-
 	SDValue Corr = DAG.getNode(ISD::ADD, dl, MVT::i40,
-		DAG.getNode(ISD::AND, dl, MVT::i40, MaskA, ZB),
-		DAG.getNode(ISD::AND, dl, MVT::i40, MaskB, ZA));
-	Corr = DAG.getNode(ISD::SHL, dl, MVT::i40, Corr,
-		DAG.getConstant(16, dl, MVT::i40));
+		DAG.getNode(ISD::AND, dl, MVT::i40, getSignMask16(DAG, dl, A16), ZB),
+		DAG.getNode(ISD::AND, dl, MVT::i40, getSignMask16(DAG, dl, B16), SA));
+	Corr = DAG.getNode(ISD::SHL, dl, MVT::i40, Corr, DAG.getConstant(16, dl, MVT::i40));
 	return DAG.getNode(ISD::ADD, dl, MVT::i40, Prod, Corr);
 }
 
 // The multiplier of the Teak takes two 16-bit operands and produces a 32-bit
-// product. i32 values are held in 40-bit registers, and only the low 32 bits of
-// the result are meaningful.
+// product. i32 values are held in 40-bit registers.
 //
-// - Operands that are sign-extended 16-bit values use one MPY.
-// - Operands that are zero-extended 16-bit values use one MPY plus a correction.
-// - Anything else is split in 16-bit halves:
+// - 16-bit operands (signed or unsigned) use one MPY plus a correction, and the
+//   result is exact.
+// - Other operands are split in 16-bit halves:
 //     a * b = lo(a) * lo(b) + (lo(a) * hi(b) + hi(a) * lo(b)) << 16 (mod 2^32)
+//   The result is extended from bit 31 when the known bits of the operands
+//   show that the exact product fits in 32 bits (and the DAG may rely on it).
 SDValue TeakTargetLowering::LowerMUL40(SDValue Op, SelectionDAG &DAG) const
 {
 	SDLoc dl(Op);
@@ -480,13 +514,23 @@ SDValue TeakTargetLowering::LowerMUL40(SDValue Op, SelectionDAG &DAG) const
 
 	// 40 - 16 + 1: the value is a sign-extended 16-bit number
 	const unsigned MinSignBits = 25;
-	if (DAG.ComputeNumSignBits(A) >= MinSignBits &&
-	    DAG.ComputeNumSignBits(B) >= MinSignBits)
-		return DAG.getNode(TeakISD::MPY, dl, MVT::i40, AL, BL);
+	unsigned SignBitsA = DAG.ComputeNumSignBits(A);
+	unsigned SignBitsB = DAG.ComputeNumSignBits(B);
+	bool SignedA = SignBitsA >= MinSignBits;
+	bool SignedB = SignBitsB >= MinSignBits;
 
 	APInt HighMask = APInt::getHighBitsSet(40, 24);
-	if (DAG.MaskedValueIsZero(A, HighMask) && DAG.MaskedValueIsZero(B, HighMask))
+	bool UnsignedA = DAG.MaskedValueIsZero(A, HighMask);
+	bool UnsignedB = DAG.MaskedValueIsZero(B, HighMask);
+
+	if (SignedA && SignedB)
+		return DAG.getNode(TeakISD::MPY, dl, MVT::i40, AL, BL);
+	if (UnsignedA && UnsignedB)
 		return getUMul16x16(DAG, dl, AL, BL);
+	if (SignedA && UnsignedB)
+		return getSUMul16x16(DAG, dl, AL, BL);
+	if (UnsignedA && SignedB)
+		return getSUMul16x16(DAG, dl, BL, AL);
 
 	SDValue Sixteen = DAG.getConstant(16, dl, MVT::i40);
 	SDValue AH = DAG.getNode(ISD::TRUNCATE, dl, MVT::i16,
@@ -500,7 +544,18 @@ SDValue TeakTargetLowering::LowerMUL40(SDValue Op, SelectionDAG &DAG) const
 		DAG.getNode(ISD::MUL, dl, MVT::i16, AH, BL));
 	Cross = DAG.getNode(ISD::SHL, dl, MVT::i40,
 		DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i40, Cross), Sixteen);
-	return DAG.getNode(ISD::ADD, dl, MVT::i40, Lo, Cross);
+	SDValue R = DAG.getNode(ISD::ADD, dl, MVT::i40, Lo, Cross);
+
+	// Known sign bits / leading zeros of the product, as computed by the DAG
+	if (SignBitsA + SignBitsB >= 40 + 9)
+		return DAG.getNode(ISD::SIGN_EXTEND_INREG, dl, MVT::i40, R,
+		                   DAG.getValueType(MVT::i32));
+	unsigned LeadingZeros = DAG.computeKnownBits(A).countMinLeadingZeros()
+	                      + DAG.computeKnownBits(B).countMinLeadingZeros();
+	if (LeadingZeros >= 40 + 8)
+		return DAG.getNode(ISD::AND, dl, MVT::i40, R,
+		                   DAG.getConstant(0xFFFFFFFFull, dl, MVT::i40));
+	return R;
 }
 
 SDValue TeakTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const
@@ -566,6 +621,21 @@ SDValue TeakTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const
 			SDValue NewOp1 = DAG.getNode(ISD::ANY_EXTEND, dl, MVT::i40, N->getOperand(1));
 			SDValue NewWOp = DAG.getNode(nodeType, dl, MVT::i40, NewOp0, NewOp1);
   			return DAG.getNode(ISD::TRUNCATE, dl, MVT::i16, NewWOp);
+		}
+		case ISD::MULHU:
+		case ISD::MULHS:
+		{
+			SDLoc dl(Op);
+			assert(Op.getValueType() == MVT::i16 && "Unexpected custom legalisation");
+			SDValue Prod;
+			if (Op.getOpcode() == ISD::MULHS)
+				Prod = DAG.getNode(TeakISD::MPY, dl, MVT::i40, Op.getOperand(0), Op.getOperand(1));
+			else
+				Prod = getUMul16x16(DAG, dl, Op.getOperand(0), Op.getOperand(1));
+			// The product is exact in 40 bits, so both shifts give the right
+			// high half
+			Prod = DAG.getNode(ISD::SRA, dl, MVT::i40, Prod, DAG.getConstant(16, dl, MVT::i40));
+			return DAG.getNode(ISD::TRUNCATE, dl, MVT::i16, Prod);
 		}
 		case ISD::MUL:
 		{

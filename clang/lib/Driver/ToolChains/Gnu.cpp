@@ -2653,6 +2653,7 @@ bool Generic_GCC::IsIntegratedAssemblerDefault() const {
   case llvm::Triple::mips64:
   case llvm::Triple::mips64el:
   case llvm::Triple::msp430:
+  case llvm::Triple::teak:
     return true;
   case llvm::Triple::sparc:
   case llvm::Triple::sparcel:

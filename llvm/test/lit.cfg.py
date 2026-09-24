@@ -162,6 +162,7 @@ tools.extend([
 tools.extend([
     ToolSubst('llvm-go', unresolved='ignore'),
     ToolSubst('llvm-mt', unresolved='ignore'),
+    ToolSubst('teak-roundtrip', unresolved='ignore'),
     ToolSubst('Kaleidoscope-Ch3', unresolved='ignore'),
     ToolSubst('Kaleidoscope-Ch4', unresolved='ignore'),
     ToolSubst('Kaleidoscope-Ch5', unresolved='ignore'),

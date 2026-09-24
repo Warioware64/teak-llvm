@@ -6,22 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Teak is a Harvard-architecture 8-bit micrcontroller designed for small
-// baremetal programs. All Teak-family processors have 32 8-bit registers.
-// The tiniest Teak has 32 byte RAM and 1 KiB program memory, and the largest
-// one supports up to 2^24 data address space and 2^22 code address space.
-//
-// Since it is a baremetal programming, there's usually no loader to load
-// ELF files on Teaks. You are expected to link your program against address
-// 0 and pull out a .text section from the result using objcopy, so that you
-// can write the linked code to on-chip flush memory. You can do that with
-// the following commands:
-//
-//   ld.lld -Ttext=0 -o foo foo.o
-//   objcopy -O binary --only-section=.text foo output.bin
-//
-// Note that the current Teak support is very preliminary so you can't
-// link any useful program yet, though.
+// Teak (TeakLite II) is the DSP of the Nintendo DSi/3DS. It addresses 16-bit
+// words: section addresses and offsets are in bytes here, and relocations
+// store word addresses (byte address >> 1). Implicit addends are likewise
+// stored in words and converted back to bytes by getImplicitAddend.
 //
 //===----------------------------------------------------------------------===//
 
@@ -55,13 +43,33 @@ Teak::Teak() { noneRel = R_TEAK_NONE; }
 
 RelExpr Teak::getRelExpr(RelType type, const Symbol &s,
                         const uint8_t *loc) const {
-  return R_ABS;
+  switch (type) {
+  case R_TEAK_REL7:
+    return R_PC;
+  default:
+    return R_ABS;
+  }
+}
+
+static int64_t getRel7Field(const uint8_t *loc) {
+  return SignExtend64<7>((read16le(loc) >> 4) & 0x7F);
 }
 
 void Teak::relocateOne(uint8_t *loc, RelType type, uint64_t val) const
 {
 	switch (type)
 	{
+		case R_TEAK_16:
+			write16le(loc, (val >> 1) & 0xFFFF);
+			break;
+		case R_TEAK_REL7:
+		{
+			// Relative to the word after the branch.
+			int64_t rel = ((int64_t)val >> 1) - 1;
+			checkInt(loc, rel, 7, type);
+			write16le(loc, (read16le(loc) & ~0x7F0) | ((rel & 0x7F) << 4));
+			break;
+		}
 		case R_TEAK_CALL_IMM18:
 			write16le(loc, (read16le(loc) & ~0x30) | (((val >> 17) & 3) << 4));
 			write16le(loc + 2, (val >> 1) & 0xFFFF);
@@ -88,6 +96,10 @@ int64_t Teak::getImplicitAddend(const uint8_t* buf, RelType type) const
 {
 	switch (type)
 	{
+		case R_TEAK_16:
+			return read16le(buf) << 1;
+		case R_TEAK_REL7:
+			return (getRel7Field(buf) + 1) << 1;
 		case R_TEAK_CALL_IMM18:
 			return (((read16le(buf) >> 4) & 3) << 17) | (read16le(buf + 2) << 1);
 		case R_TEAK_PTR_IMM16:

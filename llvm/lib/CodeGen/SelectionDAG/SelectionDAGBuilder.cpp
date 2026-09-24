@@ -3864,7 +3864,7 @@ void SelectionDAGBuilder::visitExtractValue(const User &I) {
 }
 
 void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
-  dbgs() << "visitGetElementPtr\n";
+  LLVM_DEBUG(dbgs() << "visitGetElementPtr\n");
   Value *Op0 = I.getOperand(0);
   // Note that the pointer operand may be a vector of pointers. Take the scalar
   // element which holds a pointer.
@@ -3930,10 +3930,9 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
         if(TM.getTargetTriple().getArch() == Triple::teak)
         {
             assert((Offs & 1) == 0 && "Offs is not word-aligned!");
-            dbgs() << "Offs = Offs.ashr(1);\n";
-            dbgs() << Offs << "\n";
+            LLVM_DEBUG(dbgs() << "Offs = Offs.ashr(1): " << Offs);
             Offs = Offs.ashr(1);
-            dbgs() << Offs << "\n";
+            LLVM_DEBUG(dbgs() << " -> " << Offs << "\n");
         }
         LLVMContext &Context = *DAG.getContext();
         SDValue OffsVal = VectorWidth ?

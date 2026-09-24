@@ -37,31 +37,8 @@ void TeakInstPrinter::printInst(const MCInst *MI, uint64_t Address, StringRef An
 }
 
 static void printExpr(const MCExpr *Expr, raw_ostream &OS) {
-  int Offset = 0;
-  const MCSymbolRefExpr *SRE;
-
-  if (const MCBinaryExpr *BE = dyn_cast<MCBinaryExpr>(Expr)) {
-    SRE = dyn_cast<MCSymbolRefExpr>(BE->getLHS());
-    const MCConstantExpr *CE = dyn_cast<MCConstantExpr>(BE->getRHS());
-    assert(SRE && CE && "Binary expression must be sym+const.");
-    Offset = CE->getValue();
-  } else {
-    SRE = dyn_cast<MCSymbolRefExpr>(Expr);
-    assert(SRE && "Unexpected MCExpr type.");
-  }
-  const MCSymbolRefExpr::VariantKind Kind = SRE->getKind();
-  assert(Kind == MCSymbolRefExpr::VK_None);// ||
-         //Kind == MCSymbolRefExpr::VK_Teak_LO ||
-        // Kind == MCSymbolRefExpr::VK_Teak_HI);
-
-  OS << SRE->getSymbol();
-
-  if (Offset) {
-    if (Offset > 0) {
-      OS << '+';
-    }
-    OS << Offset;
-  }
+  // Symbol references, sym+const and arbitrary assembler expressions.
+  Expr->print(OS, nullptr);
 }
 
 // Print a condition code (e.g. for predication).

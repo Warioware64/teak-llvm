@@ -1090,6 +1090,14 @@ void TeakMCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
             EmitConstant(MI.getOperand(0).getImm(), 2, OS);
             EmitConstant(MI.getOperand(1).getImm(), 2, OS);
             break;
+        case Teak::RawAsmOpFixup:
+        case Teak::RawAsmOpExtendedFixup:
+            EmitConstant(MI.getOperand(0).getImm(), 2, OS);
+            if (MI.getOpcode() == Teak::RawAsmOpExtendedFixup)
+                EmitConstant(0, 2, OS);
+            Fixups.push_back(MCFixup::create(0, MI.getOperand(1).getExpr(),
+                MCFixupKind(MI.getOperand(2).getImm()), MI.getLoc()));
+            break;
         case Teak::XOR_imm8u_a:
             EmitConstant(0xC400 | (encodeAxOp(MI.getOperand(0).getReg()) << 8) | (MI.getOperand(1).getImm() & 0xFF), 2, OS);
             break;

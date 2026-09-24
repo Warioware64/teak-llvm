@@ -101,6 +101,7 @@ TeakTargetLowering::TeakTargetLowering(const TeakTargetMachine &TeakTM)
 	setOperationAction(ISD::ADD, MVT::i16, Custom);
 	setOperationAction(ISD::SUB, MVT::i16, Custom);
 	setOperationAction(ISD::MUL, MVT::i16, Custom);
+	setOperationAction(ISD::MUL, MVT::i40, Custom);
 	setOperationAction(ISD::AND, MVT::i16, Custom);
 	setOperationAction(ISD::AND, MVT::i40, Custom);
 	setOperationAction(ISD::XOR, MVT::i16, Custom);
@@ -246,6 +247,13 @@ bool TeakTargetLowering::getPostIndexedAddressParts(SDNode* N, SDNode* Op,
 	const LoadSDNode* ld = dyn_cast<LoadSDNode>(N);
 	const StoreSDNode* st = dyn_cast<StoreSDNode>(N);
 	if (!(ld && ld->getMemoryVT() == MVT::i16) && !(st && st->getMemoryVT() == MVT::i16))
+		return false;
+
+	// Only plain 16-bit accesses have post-increment instructions. Extending
+	// loads and truncating stores to/from accumulators don't.
+	if (ld && ld->getExtensionType() != ISD::NON_EXTLOAD)
+		return false;
+	if (st && st->isTruncatingStore())
 		return false;
 
 	if (Op->getOpcode() != ISD::ADD && Op->getOpcode() != ISD::SUB)
@@ -428,6 +436,73 @@ SDValue TeakTargetLowering::LowerBR_CC(SDValue Op, SelectionDAG &DAG) const
 						DAG.getConstant(SPCC, dl, MVT::i40), CompareFlag);
 }
 
+// Unsigned 16x16 -> 32 bit product, using the signed multiplier plus a
+// correction for the operands with bit 15 set:
+//   ua * ub = sa * sb + ((sa < 0 ? ub : 0) + (sb < 0 ? ua : 0)) << 16 (mod 2^32)
+// Only the low 16 bits of the correction affect the result.
+static SDValue getUMul16x16(SelectionDAG &DAG, const SDLoc &dl, SDValue A16,
+                            SDValue B16)
+{
+	SDValue Prod = DAG.getNode(TeakISD::MPY, dl, MVT::i40, A16, B16);
+
+	SDValue Fifteen = DAG.getConstant(15, dl, MVT::i40);
+	SDValue MaskA = DAG.getNode(ISD::SRA, dl, MVT::i40,
+		DAG.getNode(ISD::SIGN_EXTEND, dl, MVT::i40, A16), Fifteen);
+	SDValue MaskB = DAG.getNode(ISD::SRA, dl, MVT::i40,
+		DAG.getNode(ISD::SIGN_EXTEND, dl, MVT::i40, B16), Fifteen);
+	SDValue ZA = DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i40, A16);
+	SDValue ZB = DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i40, B16);
+
+	SDValue Corr = DAG.getNode(ISD::ADD, dl, MVT::i40,
+		DAG.getNode(ISD::AND, dl, MVT::i40, MaskA, ZB),
+		DAG.getNode(ISD::AND, dl, MVT::i40, MaskB, ZA));
+	Corr = DAG.getNode(ISD::SHL, dl, MVT::i40, Corr,
+		DAG.getConstant(16, dl, MVT::i40));
+	return DAG.getNode(ISD::ADD, dl, MVT::i40, Prod, Corr);
+}
+
+// The multiplier of the Teak takes two 16-bit operands and produces a 32-bit
+// product. i32 values are held in 40-bit registers, and only the low 32 bits of
+// the result are meaningful.
+//
+// - Operands that are sign-extended 16-bit values use one MPY.
+// - Operands that are zero-extended 16-bit values use one MPY plus a correction.
+// - Anything else is split in 16-bit halves:
+//     a * b = lo(a) * lo(b) + (lo(a) * hi(b) + hi(a) * lo(b)) << 16 (mod 2^32)
+SDValue TeakTargetLowering::LowerMUL40(SDValue Op, SelectionDAG &DAG) const
+{
+	SDLoc dl(Op);
+	SDValue A = Op.getOperand(0);
+	SDValue B = Op.getOperand(1);
+
+	SDValue AL = DAG.getNode(ISD::TRUNCATE, dl, MVT::i16, A);
+	SDValue BL = DAG.getNode(ISD::TRUNCATE, dl, MVT::i16, B);
+
+	// 40 - 16 + 1: the value is a sign-extended 16-bit number
+	const unsigned MinSignBits = 25;
+	if (DAG.ComputeNumSignBits(A) >= MinSignBits &&
+	    DAG.ComputeNumSignBits(B) >= MinSignBits)
+		return DAG.getNode(TeakISD::MPY, dl, MVT::i40, AL, BL);
+
+	APInt HighMask = APInt::getHighBitsSet(40, 24);
+	if (DAG.MaskedValueIsZero(A, HighMask) && DAG.MaskedValueIsZero(B, HighMask))
+		return getUMul16x16(DAG, dl, AL, BL);
+
+	SDValue Sixteen = DAG.getConstant(16, dl, MVT::i40);
+	SDValue AH = DAG.getNode(ISD::TRUNCATE, dl, MVT::i16,
+		DAG.getNode(ISD::SRL, dl, MVT::i40, A, Sixteen));
+	SDValue BH = DAG.getNode(ISD::TRUNCATE, dl, MVT::i16,
+		DAG.getNode(ISD::SRL, dl, MVT::i40, B, Sixteen));
+
+	SDValue Lo = getUMul16x16(DAG, dl, AL, BL);
+	SDValue Cross = DAG.getNode(ISD::ADD, dl, MVT::i16,
+		DAG.getNode(ISD::MUL, dl, MVT::i16, AL, BH),
+		DAG.getNode(ISD::MUL, dl, MVT::i16, AH, BL));
+	Cross = DAG.getNode(ISD::SHL, dl, MVT::i40,
+		DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i40, Cross), Sixteen);
+	return DAG.getNode(ISD::ADD, dl, MVT::i40, Lo, Cross);
+}
+
 SDValue TeakTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const
 {
 	// dbgs() << "LowerOperation\n";
@@ -496,6 +571,8 @@ SDValue TeakTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const
 		{
 			const SDNode *N = Op.getNode();
 			SDLoc dl(N);
+			if (N->getValueType(0) == MVT::i40)
+				return LowerMUL40(Op, DAG);
 			assert(N->getValueType(0) == MVT::i16 && "Unexpected custom legalisation");
 			return DAG.getNode(ISD::TRUNCATE, dl, MVT::i16, DAG.getNode(TeakISD::MPY, dl, MVT::i40, N->getOperand(0), N->getOperand(1)));
 		}
@@ -649,6 +726,9 @@ SDValue TeakTargetLowering::LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) co
 //===----------------------------------------------------------------------===//
 
 #include "TeakGenCallingConv.inc"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "teak-lower"
 
 //===----------------------------------------------------------------------===//
 //                  Call Calling Convention Implementation
@@ -864,8 +944,8 @@ SDValue TeakTargetLowering::LowerFormalArguments(
 	  // assert((RegVT.getSimpleVT().SimpleTy == MVT::i16 ||
 	  // RegVT.getSimpleVT().SimpleTy == MVT::i40) &&
 	  //      "Only support MVT::i16 and MVT::i40 register passing");
-	  dbgs() << "LowerFormalArguments: " << RegVT.getEVTString()
-			 << " locreg=" << VA.getLocReg() << "\n";
+	  LLVM_DEBUG(dbgs() << "LowerFormalArguments: " << RegVT.getEVTString()
+			 << " locreg=" << VA.getLocReg() << "\n");
 	  unsigned VReg = MF.addLiveIn(VA.getLocReg(), RC);
 	  SDValue ArgIn = DAG.getCopyFromReg(Chain, dl, VReg, RegVT);
 	  // Truncate the register down to the argument type.
@@ -964,7 +1044,7 @@ void TeakTargetLowering::ReplaceNodeResults(SDNode *N,
 											SmallVectorImpl<SDValue> &Results,
 											SelectionDAG &DAG) const
 {
-	dbgs() << "Opcode = " << N->getOpcode();
+	LLVM_DEBUG(dbgs() << "Opcode = " << N->getOpcode());
 	//DAG.dump();
 	//N->dumpr(&DAG);
 	SDLoc dl(N);

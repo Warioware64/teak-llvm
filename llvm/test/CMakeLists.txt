@@ -118,6 +118,10 @@ if(TARGET llvm-lto)
   set(LLVM_TEST_DEPENDS ${LLVM_TEST_DEPENDS} llvm-lto)
 endif()
 
+if(TARGET teak-roundtrip)
+  set(LLVM_TEST_DEPENDS ${LLVM_TEST_DEPENDS} teak-roundtrip)
+endif()
+
 # If Intel JIT events are supported, depend on a tool that tests the listener.
 if( LLVM_USE_INTEL_JITEVENTS )
   set(LLVM_TEST_DEPENDS ${LLVM_TEST_DEPENDS} llvm-jitlistener)

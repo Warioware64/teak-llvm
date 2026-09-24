@@ -30,6 +30,9 @@
 
 #define GET_INSTRINFO_CTOR_DTOR
 #include "TeakGenInstrInfo.inc"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "teak-instr-info"
 
 using namespace llvm;
 
@@ -289,7 +292,7 @@ void TeakInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     const TeakSubtarget &st = MF.getSubtarget<TeakSubtarget>();
     const TargetRegisterInfo *RegInfo = st.getRegisterInfo();
     bool keepFlags = MBB.computeRegisterLiveness(RegInfo, Teak::ICC, I) != MachineBasicBlock::LQR_Dead;
-    dbgs() << "copyPhysReg(" << SrcReg.id() << ", " << DestReg.id() << ")\n";
+    LLVM_DEBUG(dbgs() << "copyPhysReg(" << SrcReg.id() << ", " << DestReg.id() << ")\n");
     unsigned op;
     // if(Teak::ABLRegsRegClass.contains(DestReg))
     // {
@@ -367,10 +370,10 @@ void TeakInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
     MachineBasicBlock::iterator I,  unsigned SrcReg, bool isKill,
     int FrameIndex, const TargetRegisterClass *RC, const TargetRegisterInfo *TRI) const
 {
-    dbgs() << "storeRegToStackSlot\n";
-    dbgs() << "SrcReg: " << SrcReg << "\n";
-    dbgs() << "TargetRegisterClass: " << RC->getID() << "\n";
-    dbgs() << "ICC live: " << MBB.computeRegisterLiveness(TRI, Teak::ICC, I) << "\n";
+    LLVM_DEBUG(dbgs() << "storeRegToStackSlot\n");
+    LLVM_DEBUG(dbgs() << "SrcReg: " << SrcReg << "\n");
+    LLVM_DEBUG(dbgs() << "TargetRegisterClass: " << RC->getID() << "\n");
+    LLVM_DEBUG(dbgs() << "ICC live: " << MBB.computeRegisterLiveness(TRI, Teak::ICC, I) << "\n");
     DebugLoc DL;
     if (I != MBB.end())
         DL = I->getDebugLoc();
@@ -425,8 +428,8 @@ void TeakInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
     MachineBasicBlock::iterator I,unsigned DestReg, int FrameIndex,
     const TargetRegisterClass *RC, const TargetRegisterInfo *TRI) const
 {
-    dbgs() << "loadRegFromStackSlot\n";
-    dbgs() << "ICC live: " << MBB.computeRegisterLiveness(TRI, Teak::ICC, I) << "\n";
+    LLVM_DEBUG(dbgs() << "loadRegFromStackSlot\n");
+    LLVM_DEBUG(dbgs() << "ICC live: " << MBB.computeRegisterLiveness(TRI, Teak::ICC, I) << "\n");
     DebugLoc DL;
     if (I != MBB.end())
         DL = I->getDebugLoc();
@@ -467,7 +470,7 @@ bool TeakInstrInfo::isPredicated(const MachineInstr &MI) const
 
 bool TeakInstrInfo::PredicateInstruction(MachineInstr &MI, ArrayRef<MachineOperand> Pred) const
 {
-    dbgs() << "PredicateInstruction\n";
+    LLVM_DEBUG(dbgs() << "PredicateInstruction\n");
     unsigned Opc = MI.getOpcode();
 
     int PIdx = MI.findFirstPredOperandIdx();
@@ -487,14 +490,14 @@ bool TeakInstrInfo::PredicateInstruction(MachineInstr &MI, ArrayRef<MachineOpera
 
 bool TeakInstrInfo::isProfitableToIfCvt(MachineBasicBlock &MBB, unsigned NumCycles, unsigned ExtraPredCycles, BranchProbability Probability) const
 {
-    dbgs() << "isProfitableToIfCvt\n";
+    LLVM_DEBUG(dbgs() << "isProfitableToIfCvt\n");
     return true;
 }
 
 bool TeakInstrInfo::isProfitableToIfCvt(MachineBasicBlock &TBB, unsigned TCycles, unsigned TExtra,
     MachineBasicBlock &FBB, unsigned FCycles, unsigned FExtra, BranchProbability Probability) const
 {
-    dbgs() << "isProfitableToIfCvt TF\n";
+    LLVM_DEBUG(dbgs() << "isProfitableToIfCvt TF\n");
     return true;
 }
 
@@ -528,7 +531,7 @@ bool TeakInstrInfo::expandPostRAPseudo(MachineInstr &MI) const
     MachineFunction &MF = *MBB.getParent();
     const TeakSubtarget &st = MF.getSubtarget<TeakSubtarget>();
     const TargetRegisterInfo *RegInfo = st.getRegisterInfo();
-    dbgs() << "Expand post, live: " << MBB.computeRegisterLiveness(RegInfo, Teak::ICC, MI) << "\n";
+    LLVM_DEBUG(dbgs() << "Expand post, live: " << MBB.computeRegisterLiveness(RegInfo, Teak::ICC, MI) << "\n");
     bool keepFlags = MBB.computeRegisterLiveness(RegInfo, Teak::ICC, MI) != MachineBasicBlock::LQR_Dead;
     switch (MI.getOpcode())
     {
@@ -536,7 +539,7 @@ bool TeakInstrInfo::expandPostRAPseudo(MachineInstr &MI) const
             return false;
         case Teak::STORE_REG_TO_STACK_PSEUDO_16:
         {
-            dbgs() << "expandPostRAPseudo for STORE_REG_TO_STACK_PSEUDO_16\n";
+            LLVM_DEBUG(dbgs() << "expandPostRAPseudo for STORE_REG_TO_STACK_PSEUDO_16\n");
             signed short frameOffset = (signed short)MI.getOperand(2).getImm();
             if(keepFlags && frameOffset)
                 BuildMI(MBB, MI, DL, get(Teak::PUSH_ararpsttmod), Teak::STT0);
@@ -553,7 +556,7 @@ bool TeakInstrInfo::expandPostRAPseudo(MachineInstr &MI) const
 
         case Teak::STORE_REG_TO_STACK_PSEUDO_TRUNC16:
         {
-            dbgs() << "expandPostRAPseudo for STORE_REG_TO_STACK_PSEUDO_TRUNC16\n";
+            LLVM_DEBUG(dbgs() << "expandPostRAPseudo for STORE_REG_TO_STACK_PSEUDO_TRUNC16\n");
             unsigned srcReg = MI.getOperand(0).getReg();
             unsigned loReg  = teakGetAbLReg(srcReg);
             signed short frameOffset = (signed short)MI.getOperand(2).getImm();
@@ -572,7 +575,7 @@ bool TeakInstrInfo::expandPostRAPseudo(MachineInstr &MI) const
         
         case Teak::STORE_REG_TO_STACK_PSEUDO_32:
         {
-            dbgs() << "expandPostRAPseudo for STORE_REG_TO_STACK_PSEUDO_32\n";
+            LLVM_DEBUG(dbgs() << "expandPostRAPseudo for STORE_REG_TO_STACK_PSEUDO_32\n");
             unsigned srcReg = MI.getOperand(0).getReg();
             unsigned loReg = teakGetAbLReg(srcReg);
             unsigned hiReg = teakGetAbHReg(srcReg);
@@ -609,7 +612,7 @@ bool TeakInstrInfo::expandPostRAPseudo(MachineInstr &MI) const
 
         case Teak::LOAD_REG_FROM_STACK_PSEUDO_16:
         {
-            dbgs() << "expandPostRAPseudo for LOAD_REG_FROM_STACK_PSEUDO_16\n";
+            LLVM_DEBUG(dbgs() << "expandPostRAPseudo for LOAD_REG_FROM_STACK_PSEUDO_16\n");
             unsigned dstReg = MI.getOperand(0).getReg();
             signed short frameOffset = (signed short)MI.getOperand(2).getImm();
             if(keepFlags)
@@ -640,7 +643,7 @@ bool TeakInstrInfo::expandPostRAPseudo(MachineInstr &MI) const
 
         case Teak::LOAD_REG_FROM_STACK_PSEUDO_16_SEXT40:
         {
-            dbgs() << "expandPostRAPseudo for LOAD_REG_FROM_STACK_PSEUDO_16_SEXT40\n";
+            LLVM_DEBUG(dbgs() << "expandPostRAPseudo for LOAD_REG_FROM_STACK_PSEUDO_16_SEXT40\n");
             unsigned dstReg = MI.getOperand(0).getReg();
             signed short frameOffset = (signed short)MI.getOperand(2).getImm();
             if(keepFlags)
@@ -671,7 +674,7 @@ bool TeakInstrInfo::expandPostRAPseudo(MachineInstr &MI) const
 
         case Teak::LOAD_REG_FROM_STACK_PSEUDO_16_ZEXT40:
         {
-            dbgs() << "expandPostRAPseudo for LOAD_REG_FROM_STACK_PSEUDO_16_ZEXT40\n";
+            LLVM_DEBUG(dbgs() << "expandPostRAPseudo for LOAD_REG_FROM_STACK_PSEUDO_16_ZEXT40\n");
             signed short frameOffset = (signed short)MI.getOperand(2).getImm();
             if(keepFlags)
                 BuildMI(MBB, MI, DL, get(Teak::PUSH_ararpsttmod), Teak::STT0);
@@ -686,7 +689,7 @@ bool TeakInstrInfo::expandPostRAPseudo(MachineInstr &MI) const
         }
         case Teak::LOAD_REG_FROM_STACK_PSEUDO_32_SEXT40:
         {
-            dbgs() << "expandPostRAPseudo for LOAD_REG_FROM_STACK_PSEUDO_32_SEXT40\n";
+            LLVM_DEBUG(dbgs() << "expandPostRAPseudo for LOAD_REG_FROM_STACK_PSEUDO_32_SEXT40\n");
             unsigned dstReg = MI.getOperand(0).getReg();
             signed short frameOffset = (signed short)MI.getOperand(2).getImm();
             if(keepFlags)

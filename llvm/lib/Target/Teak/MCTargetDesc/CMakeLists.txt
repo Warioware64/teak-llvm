@@ -2,6 +2,7 @@ add_llvm_component_library(LLVMTeakDesc
   TeakMCTargetDesc.cpp
   TeakMCAsmInfo.cpp
   TeakMCCodeEmitter.cpp
+  TeakMCExpr.cpp
   TeakAsmBackend.cpp
   TeakELFObjectWriter.cpp
   TeakELFStreamer.cpp

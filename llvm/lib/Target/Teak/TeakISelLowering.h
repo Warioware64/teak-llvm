@@ -120,6 +120,7 @@ private:
 
     // LowerGlobalAddress - Emit a constant load to the global address.
     SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerMUL40(SDValue Op, SelectionDAG &DAG) const;
 
     MachineBasicBlock* ExpandSelectCC(MachineInstr &MI, MachineBasicBlock *BB, unsigned BROpcode) const;
 };

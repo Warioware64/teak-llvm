@@ -56,11 +56,13 @@ public:
         // TeakFixupKinds.h.
         //
         // Name                      Offset (bits) Size (bits)     Flags
-        { "fixup_teak_call_imm18", 0, 18, 0 },
-        { "fixup_teak_rel7", 0, 7, MCFixupKindInfo::FKF_IsPCRel },
-        { "fixup_teak_ptr_imm16", 0, 16, 0 },
-        { "fixup_teak_bkrep_reg", 0, 18, 0 },
-        { "fixup_teak_bkrep_r6", 0, 18, 0 },
+        // The 18-bit forms also patch two bits of the opcode word, which
+        // can't be described here; only the extension word is listed.
+        { "fixup_teak_call_imm18", 16, 16, 0 },
+        { "fixup_teak_rel7", 4, 7, MCFixupKindInfo::FKF_IsPCRel },
+        { "fixup_teak_ptr_imm16", 16, 16, 0 },
+        { "fixup_teak_bkrep_reg", 16, 16, 0 },
+        { "fixup_teak_bkrep_r6", 16, 16, 0 },
     };
 
     if (Kind < FirstTargetFixupKind)
@@ -88,32 +90,14 @@ public:
                         MCInst &Res) const override {}
 
   bool writeNopData(raw_ostream &OS, uint64_t Count) const override {
-    if (Count == 0) {
-      return true;
-    }
-    return false;
+    // nop is 0x0000.
+    OS.write_zeros(Count);
+    return true;
   }
 
   unsigned getPointerSize() const { return 2; }
 };
 } // end anonymous namespace
-
-// static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value, MCContext *Ctx = NULL)
-// {
-//     unsigned Kind = Fixup.getKind();
-//     switch (Kind)
-//     {
-//         case R_TEAK_CALL_IMM18:
-//             return 
-//           write16le(loc, (read16le(loc) & ~0x30) | (((val >> 17) & 3) << 4));
-//           write16le(loc + 2, (val >> 1) & 0xFFFF);
-//           break;
-//         case R_TEAK_PTR_IMM16:
-//           write16le(loc + 2, (val >> 1) & 0xFFFF);
-//           break;
-//     }
-//     return Value;
-// }
 
 void TeakAsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
                                const MCValue &Target,
@@ -122,44 +106,62 @@ void TeakAsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
                                const MCSubtargetInfo *STI) const {
     unsigned Offset = Fixup.getOffset();
     unsigned Kind = Fixup.getKind();
+    bool IsPCRel = getFixupKindInfo(Fixup.getKind()).Flags & MCFixupKindInfo::FKF_IsPCRel;
+
+    // Teak addresses 16-bit words. Relocated values are already in words (see
+    // ELFObjectWriter) and so is resolved label arithmetic (see TeakWordExpr),
+    // but a resolved PC-relative distance is in bytes, while its constant part
+    // is written in words by the user.
+    int64_t V = (int64_t)Value;
+    if (IsResolved && IsPCRel) {
+        int64_t C = Target.getConstant();
+        V = ((V - C) >> 1) + C;
+    }
+
     switch (Kind)
     {
         case Teak::fixup_teak_call_imm18:
-            write16le(&Data[Offset], (read16le(&Data[Offset]) & ~0x30) | (((Value >> 16) & 3) << 4));
-            write16le(&Data[Offset + 2], Value & 0xFFFF);
+            write16le(&Data[Offset], (read16le(&Data[Offset]) & ~0x30) | (((V >> 16) & 3) << 4));
+            write16le(&Data[Offset + 2], V & 0xFFFF);
             break;
         case Teak::fixup_teak_rel7:
-            write16le(&Data[Offset], (read16le(&Data[Offset]) & ~0x7F0) | ((((Value >> 1) - 1) & 0x7F) << 4));
+        {
+            int64_t Rel = V - 1; // relative to the next instruction
+            if (IsResolved && (Rel < -64 || Rel > 63))
+                Asm.getContext().reportError(Fixup.getLoc(),
+                    "relative branch target out of range (" + Twine(Rel) +
+                    " words, must be within -64..63); use br/call instead");
+            write16le(&Data[Offset], (read16le(&Data[Offset]) & ~0x7F0) | ((Rel & 0x7F) << 4));
             break;
+        }
         case Teak::fixup_teak_ptr_imm16:
-            write16le(&Data[Offset + 2], Value);
+            write16le(&Data[Offset + 2], V & 0xFFFF);
             break;
         case Teak::fixup_teak_bkrep_reg:
-            Value--; //bkrep wants as address the last instruction word
-            write16le(&Data[Offset], (read16le(&Data[Offset]) & ~0x60) | (((Value >> 16) & 3) << 5));
-            write16le(&Data[Offset + 2], Value & 0xFFFF);
+            V--; //bkrep wants as address the last instruction word
+            write16le(&Data[Offset], (read16le(&Data[Offset]) & ~0x60) | (((V >> 16) & 3) << 5));
+            write16le(&Data[Offset + 2], V & 0xFFFF);
             break;
         case Teak::fixup_teak_bkrep_r6:
-            Value--; //bkrep wants as address the last instruction word
-            write16le(&Data[Offset], (read16le(&Data[Offset]) & ~3) | ((Value >> 16) & 3));
-            write16le(&Data[Offset + 2], Value & 0xFFFF);
+            V--; //bkrep wants as address the last instruction word
+            write16le(&Data[Offset], (read16le(&Data[Offset]) & ~3) | ((V >> 16) & 3));
+            write16le(&Data[Offset + 2], V & 0xFFFF);
+            break;
+        case FK_Data_1:
+            Data[Offset] = V & 0xFF;
+            break;
+        case FK_Data_2:
+            write16le(&Data[Offset], V & 0xFFFF);
+            break;
+        case FK_Data_4:
+            // 32-bit values are stored high word first (see TeakELFStreamer).
+            write16le(&Data[Offset], (V >> 16) & 0xFFFF);
+            write16le(&Data[Offset + 2], V & 0xFFFF);
+            break;
+        default:
+            Asm.getContext().reportError(Fixup.getLoc(), "unsupported fixup kind for Teak");
             break;
     }
-//   unsigned NumBytes = 4;
-//   Value = adjustFixupValue(Fixup, Value);
-//   if (!Value) {
-//     return; // Doesn't change encoding.
-//   }
-
-//   unsigned Offset = Fixup.getOffset();
-//   assert(Offset + NumBytes <= DataSize && "Invalid fixup offset!");
-
-//   // For each byte of the fragment that the fixup touches, mask in the bits from
-//   // the fixup value. The Value has been "split up" into the appropriate
-//   // bitfields above.
-//   for (unsigned i = 0; i != NumBytes; ++i) {
-//     Data[Offset + i] |= uint8_t((Value >> (i * 8)) & 0xff);
-//   }
 }
 
 namespace {

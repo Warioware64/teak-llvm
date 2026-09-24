@@ -40,6 +40,9 @@ using namespace llvm;
 
 #define GET_REGINFO_TARGET_DESC
 #include "TeakGenRegisterInfo.inc"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "teak-reg-info"
 
 TeakRegisterInfo::TeakRegisterInfo() : TeakGenRegisterInfo(0) {}
 
@@ -139,7 +142,7 @@ unsigned TeakRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC, Ma
 void TeakRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                                           int SPAdj, unsigned FIOperandNum,
                                           RegScavenger *RS) const {
-    dbgs() << "eliminateFrameIndex\n";
+    LLVM_DEBUG(dbgs() << "eliminateFrameIndex\n");
     MachineInstr &MI = *II;
     const MachineFunction &MF = *MI.getParent()->getParent();
     const MachineFrameInfo& MFI = MF.getFrameInfo();
@@ -178,7 +181,7 @@ Register TeakRegisterInfo::getFrameRegister(const MachineFunction &MF) const
 bool TeakRegisterInfo::isFrameOffsetLegal(
     const MachineInstr* 	MI, unsigned 	BaseReg, int64_t Offset) const
 {
-    dbgs() << "isFrameOffsetLegal\n";
+    LLVM_DEBUG(dbgs() << "isFrameOffsetLegal\n");
     return true;//Offset == 0;
 }
 
@@ -225,7 +228,7 @@ void TeakRegisterInfo::materializeFrameBaseRegister(MachineBasicBlock *MBB,
 
 void TeakRegisterInfo::resolveFrameIndex(MachineInstr &MI, unsigned BaseReg, int64_t Offset) const
 {
-    dbgs() << "resolveFrameIndex\n";
+    LLVM_DEBUG(dbgs() << "resolveFrameIndex\n");
     //MI.dump();
     const MachineFunction &MF = *MI.getParent()->getParent();
     const MachineFrameInfo& MFI = MF.getFrameInfo();
@@ -262,13 +265,13 @@ void TeakRegisterInfo::resolveFrameIndex(MachineInstr &MI, unsigned BaseReg, int
 bool TeakRegisterInfo::shouldCoalesce(MachineInstr *MI, const TargetRegisterClass *SrcRC, unsigned SubReg,
     const TargetRegisterClass *DstRC, unsigned DstSubReg, const TargetRegisterClass *NewRC, LiveIntervals &LIS) const
 {
-    dbgs() << "shouldCoalesce\n";
+    LLVM_DEBUG(dbgs() << "shouldCoalesce\n");
     //MI->dump();
-    dbgs() << "SrcRC: " << SrcRC->getID() << "\n";
-    dbgs() << "SubReg: " << SubReg << "\n";
-    dbgs() << "DstRC: " << DstRC->getID() << "\n";
-    dbgs() << "DstSubReg: " << DstSubReg << "\n";
-    dbgs() << "NewRC: " << NewRC->getID() << "\n";
+    LLVM_DEBUG(dbgs() << "SrcRC: " << SrcRC->getID() << "\n");
+    LLVM_DEBUG(dbgs() << "SubReg: " << SubReg << "\n");
+    LLVM_DEBUG(dbgs() << "DstRC: " << DstRC->getID() << "\n");
+    LLVM_DEBUG(dbgs() << "DstSubReg: " << DstSubReg << "\n");
+    LLVM_DEBUG(dbgs() << "NewRC: " << NewRC->getID() << "\n");
 
     // if (SrcRC->hasSuperClassEq(&Teak::SVRegRegClass) ||
     //     DstRC->hasSuperClassEq(&Teak::SVRegRegClass) ||

@@ -23,6 +23,7 @@
 
 # Nested build directory
 /build*
+!/build-teak.sh
 
 #==============================================================================#
 # Explicit files to ignore (only matches one).
@@ -45,7 +46,8 @@ autoconf/autom4te.cache
 /CMakeSettings.json
 # CLion project configuration
 /.idea
-
+/helpSrc
+/.cache
 #==============================================================================#
 # Directories to ignore (do not add trailing '/'s, they skip symlinks).
 #==============================================================================#

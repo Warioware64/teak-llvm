@@ -611,7 +611,7 @@ let Uses = [ICC], usesCustomInserter = 1 in
 }
 
 let Uses = [ICC], isBranch = 1, isTerminator = 1 in
-def BRRCond_rel7 : InstTeak<(outs), (ins Operand<OtherVT>:$addr, CCOp:$p), "br $addr, $p", [(TeakBRICC bb:$addr, imm:$p)]>;
+def BRRCond_rel7 : InstTeak<(outs), (ins Operand<OtherVT>:$addr, CCOp:$p), "brr $addr, $p", [(TeakBRICC bb:$addr, imm:$p)]>;
 
 // let Uses = [ICC], isBranch = 1, isTerminator = 1 in
 // def BRCond_imm18 : InstTeakImm16<(outs), (ins Operand<OtherVT>:$addr, CCOp:$cond), "br $addr, $cond", [(TeakBRICC bb:$addr, imm:$cond)]>;
@@ -625,7 +625,7 @@ let isBranch = 1, isTerminator = 1 in
 def BR_imm18 : InstTeakImm16<(outs), (ins Operand<OtherVT>:$addr, pred:$p), "br $addr, $p", []>;
 
 let Defs = [LC] in
-def BKREP_reg16 : InstTeakImm16<(outs), (ins RegNoBRegs16:$it, Operand<OtherVT>:$addr), "bkre $it, $addr", []>;
+def BKREP_reg16 : InstTeakImm16<(outs), (ins RegNoBRegs16:$it, Operand<OtherVT>:$addr), "bkrep $it, $addr", []>;
 
 let isCall = 1, Uses = [SP] in 
 def CALLR_rel7 : InstTeak<(outs), (ins Operand<i40>:$addr, pred:$p), "callr $addr, $p", []>;
@@ -644,6 +644,10 @@ let Defs = [SP], Uses = [SP] in
 
 def RawAsmOp : InstTeak<(outs), (ins i16imm:$opcode), ".word $opcode", []>;
 def RawAsmOpExtended : InstTeakImm16<(outs), (ins i16imm:$opcode, i16imm:$ext), ".word $opcode, $ext", []>;
+// Raw opcodes produced by the assembler whose target or extension word is a
+// symbolic expression; $kind is the Teak fixup kind to apply to $target.
+def RawAsmOpFixup : InstTeak<(outs), (ins i16imm:$opcode, i16imm:$target, i16imm:$kind), ".word $opcode", []>;
+def RawAsmOpExtendedFixup : InstTeakImm16<(outs), (ins i16imm:$opcode, i16imm:$target, i16imm:$kind), ".word $opcode, $target", []>;
 
 def : Pat<(i40 (add ARegs:$a, (sextloadi16 (TeakWrapper tglobaladdr:$src)))), (ADD_memimm16_a tglobaladdr:$src, ARegs:$a)>;
 def : Pat<(i40 (TeakAnd ARegs:$a, (zextloadi16 (TeakWrapper tglobaladdr:$src)))), (AND_memimm16_a tglobaladdr:$src, ARegs:$a)>;

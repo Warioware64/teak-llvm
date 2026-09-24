@@ -1,4 +1,4 @@
-//===--- ARC.h - Declare ARC target feature support -------------*- C++ -*-===//
+//===--- Teak.h - Declare Teak target feature support -----------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file declares ARC TargetInfo objects.
+// This file declares Teak TargetInfo objects.
 //
 //===----------------------------------------------------------------------===//
 
@@ -52,10 +52,12 @@ public:
 
   ArrayRef<const char *> getGCCRegNames() const override {
     static const char *const GCCRegNames[] = {
-        "r0",  "r1",  "r2",  "r3",  "r4",  "r5",     "r6",  "r7",
-        "r8",  "r9",  "r10", "r11", "r12", "r13",    "r14", "r15",
-        "r16", "r17", "r18", "r19", "r20", "r21",    "r22", "r23",
-        "r24", "r25", "gp",  "sp",  "fp",  "ilink1", "r30", "blink"};
+        "a0",   "a0l",  "a0h",  "a0e",  "a1",   "a1l",  "a1h",  "a1e",
+        "b0",   "b0l",  "b0h",  "b0e",  "b1",   "b1l",  "b1h",  "b1e",
+        "r0",   "r1",   "r2",   "r3",   "r4",   "r5",   "r6",   "r7",
+        "x0",   "x1",   "y0",   "y1",   "p0",   "p1",   "pc",   "sp",
+        "sv",   "lc",   "stt0", "stt1", "stt2", "mod0", "mod1", "mod2",
+        "mod3", "ext0", "ext1", "ext2", "ext3"};
     return llvm::makeArrayRef(GCCRegNames);
   }
 
@@ -72,4 +74,4 @@ public:
 } // namespace targets
 } // namespace clang
 
-#endif // LLVM_CLANG_LIB_BASIC_TARGETS_ARC_H
+#endif // LLVM_CLANG_LIB_BASIC_TARGETS_TEAK_H

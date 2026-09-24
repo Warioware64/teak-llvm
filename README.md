@@ -1,3 +1,16 @@
+# Teak toolchain for BlocksDS
+
+This fork provides the clang/lld toolchain for the Teak DSP of the DSi/3DS,
+used to build [libteak](https://codeberg.org/blocksds/libteak) and DSP programs.
+
+```sh
+./build-teak.sh all   # configure, build, run the Teak tests, install
+```
+
+The toolchain is installed to `$BLOCKSDSEXT/llvm-teak` (`BLOCKSDSEXT` defaults
+to `/opt/blocksds/external`; override the full path with `PREFIX=...`).
+Individual steps: `./build-teak.sh configure build check install`.
+
 # The LLVM Compiler Infrastructure
 
 This directory and its subdirectories contain source code for LLVM,

@@ -21,6 +21,8 @@
 
 #include "TeakInstrInfo.h"
 
+#define DEBUG_TYPE "teak-isel"
+
 using namespace llvm;
 
 /// TeakDAGToDAGISel - Teak specific code to select Teak machine
@@ -58,7 +60,7 @@ namespace
 
 bool TeakDAGToDAGISel::SelectAddr(SDValue Addr, SDValue &Base, SDValue& Offset)
 {
-    dbgs() << "TeakDAGToDAGISel::SelectAddr: " << Addr.getOpcode() << "\n";
+    LLVM_DEBUG(dbgs() << "TeakDAGToDAGISel::SelectAddr: " << Addr.getOpcode() << "\n");
     if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr))
     {
         EVT PtrVT = getTargetLowering()->getPointerTy(CurDAG->getDataLayout());
@@ -132,16 +134,16 @@ bool TeakDAGToDAGISel::SelectAddr(SDValue Addr, SDValue &Base, SDValue& Offset)
 
 bool TeakDAGToDAGISel::SelectLoad(SDNode* node)
 {
-	dbgs() << "TeakDAGToDAGISel::SelectLoad\n";
+	LLVM_DEBUG(dbgs() << "TeakDAGToDAGISel::SelectLoad\n");
 	const LoadSDNode* ld = cast<LoadSDNode>(node);
 	ISD::MemIndexedMode idxMode = ld->getAddressingMode();
   	MVT vType = ld->getMemoryVT().getSimpleVT();
 	//ld->dump();
-	dbgs() << "mode: " << idxMode << "\n";
+	LLVM_DEBUG(dbgs() << "mode: " << idxMode << "\n");
 	if(idxMode != ISD::POST_INC && idxMode != ISD::POST_DEC)
 		return false;
 	int offs = cast<ConstantSDNode>(ld->getOffset())->getSExtValue();
-	dbgs() << "offset: " << offs << "\n";
+	LLVM_DEBUG(dbgs() << "offset: " << offs << "\n");
 	return false;
 }
 

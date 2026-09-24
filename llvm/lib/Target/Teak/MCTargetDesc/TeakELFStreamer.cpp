@@ -1,4 +1,5 @@
 #include "TeakELFStreamer.h"
+#include "TeakMCExpr.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAssembler.h"
@@ -32,6 +33,12 @@ void TeakELFStreamer::EmitIntValue(uint64_t Value, unsigned Size)
         return;
     }
     MCELFStreamer::EmitIntValue(Value, Size);
+}
+
+void TeakELFStreamer::EmitValueImpl(const MCExpr *Value, unsigned Size, SMLoc Loc)
+{
+    // Label arithmetic in data is counted in 16-bit words.
+    MCELFStreamer::EmitValueImpl(TeakWordExpr::create(Value, getContext()), Size, Loc);
 }
 
 MCELFStreamer* llvm::createTeakELFStreamer(MCContext &Context, std::unique_ptr<MCAsmBackend> MAB,

@@ -18,6 +18,7 @@ namespace llvm
             std::unique_ptr<MCObjectWriter> OW, std::unique_ptr<MCCodeEmitter> Emitter);
         
         void EmitIntValue(uint64_t Value, unsigned Size) override;
+        void EmitValueImpl(const MCExpr *Value, unsigned Size, SMLoc Loc) override;
     };
 
     MCELFStreamer* createTeakELFStreamer(MCContext &Context, std::unique_ptr<MCAsmBackend> MAB,

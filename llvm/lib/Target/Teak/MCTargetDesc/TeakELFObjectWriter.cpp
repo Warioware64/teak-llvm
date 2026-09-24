@@ -12,6 +12,7 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCELFObjectWriter.h"
+#include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCValue.h"
@@ -43,10 +44,19 @@ unsigned TeakELFObjectWriter::getRelocType(MCContext &Ctx,
 //     llvm_unreachable("Only dealying with PC-relative fixups for now");
 //   }
 
-  unsigned Type = 0;
+  unsigned Type = ELF::R_TEAK_NONE;
   switch ((unsigned)Fixup.getKind()) {
   default:
-    llvm_unreachable("Unimplemented");
+    Ctx.reportError(Fixup.getLoc(), "unsupported relocation for Teak");
+    break;
+  case FK_Data_2:
+    Type = ELF::R_TEAK_16;
+    break;
+  case FK_Data_1:
+  case FK_Data_4:
+    Ctx.reportError(Fixup.getLoc(), "only 16-bit data (.short/.word) can "
+                                    "refer to a symbol on Teak");
+    break;
   case Teak::fixup_teak_call_imm18:
     Type = ELF::R_TEAK_CALL_IMM18;
     break;
